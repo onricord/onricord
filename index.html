@@ -530,7 +530,7 @@
           겜할사람
           <svg class="i" viewBox="0 0 24 24"><use href="#ic-chevron"/></svg>
         </b>
-        <small><i class="online-dot"></i>2명 온라인</small>
+        <small><i class="online-dot"></i><span id="online-count">1명 온라인</span></small>
       </div>
       <button class="icon-btn" type="button" aria-label="검색">
         <svg class="i" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="M16 16l5 5"/></svg>
@@ -544,7 +544,6 @@
             <svg class="i" viewBox="0 0 24 24"><path d="M9 4L7 20M17 4l-2 16M4 9h16M3.5 15h16"/></svg>
           </div>
           <h2>오시온님의 서버에 오신 것을 환영합니다!</h2>
-          <p>직접 만드신 새로운 서버에 오신 것을 환영해요.</p>
         </div>
         <div id="messages"></div>
       </div>
@@ -583,8 +582,8 @@
         <input id="f-name" name="name" type="text" autocomplete="nickname" maxlength="16" placeholder="2~16자">
       </div>
       <div class="field">
-        <label for="f-email">아이디</label>
-        <input id="f-email" name="email" type="text" autocomplete="username" autocapitalize="none" spellcheck="false" maxlength="32" placeholder="영어·숫자 아무거나">
+        <label for="f-email">이메일</label>
+        <input id="f-email" name="email" type="email" autocomplete="email" placeholder="you@example.com">
       </div>
       <div class="field">
         <label for="f-pw">비밀번호</label>
@@ -674,6 +673,7 @@
         renderHome(user);
         app.classList.remove('is-welcome');
         app.classList.add('is-home');
+        checkNudge();
       } else {
         app.classList.remove('is-home');
         app.classList.add('is-welcome');
@@ -693,7 +693,7 @@
       submit.textContent = signup ? '가입하기' : '로그인';
       hint.textContent = signup
         ? '먼저 가입해야 로그인할 수 있어요. 닉네임은 내 정보와 서버 이름에 표시돼요.'
-        : '가입한 아이디와 비밀번호로만 로그인할 수 있어요.';
+        : '가입한 이메일과 비밀번호로만 로그인할 수 있어요.';
       swap.textContent = signup ? '이미 가입했나요? 로그인' : '아직 가입 전이에요. 가입하기';
       nameField.hidden = !signup;
       pwInput.autocomplete = signup ? 'new-password' : 'current-password';
@@ -800,9 +800,18 @@
       return row;
     }
     function scrollFeed() { feed.scrollTop = feed.scrollHeight; }
+    // 채팅창에 있는 사람 수 = 나 + 이 채널에서 말한 사람들(중복 없이)
+    function updateOnline() {
+      var ids = {};
+      var me = currentUser();
+      if (me) ids[me.id] = true;
+      read(MSG_KEY, []).forEach(function (x) { ids[x.userId] = true; });
+      $('online-count').textContent = Object.keys(ids).length + '명 온라인';
+    }
     function renderMessages() {
       msgList.textContent = '';
       read(MSG_KEY, []).forEach(function (m) { msgList.appendChild(messageNode(m)); });
+      updateOnline();
       scrollFeed();
     }
     function updateSend() {
@@ -820,7 +829,7 @@
       riku: { nickname: '리쿠', hue: 205 },
       sion: { nickname: '오시온', hue: 28 }
     };
-    function postBot(botId, text) {
+    function postBot(botId, text, ts) {
       var bot = BOTS[botId];
       var m = {
         id: bytesToHex(crypto.getRandomValues(new Uint8Array(6))),
@@ -828,22 +837,51 @@
         nickname: bot.nickname,
         hue: bot.hue,
         text: text,
-        ts: Date.now()
+        ts: ts || Date.now()
       };
       var list = read(MSG_KEY, []);
       list.push(m);
       write(MSG_KEY, list.slice(-200));
       msgList.appendChild(messageNode(m));
+      updateOnline();
       scrollFeed();
+      checkNudge();
     }
+
+    // 사용자가 10분 동안 답이 없으면 오시온이 한 번 말을 걸어요.
+    // 페이지가 닫혀 있었어도, 다시 열리면 10분이 지난 시각으로 댓글이 달려 있어요.
+    var NUDGE_MS = 10 * 60 * 1000;
+    var NUDGE_TEXT = '야 너 바쁘냐?';
+    var RIKU_INVITE = '시온이 형이 초대했어요?';
+    var SION_WELCOME = '오 뭐야 들어 왔네 ㅋㅋㅋ';
+    var RIKU_LAST = '형 도대체 몇명한테 초대한거야';
+    var nudgeTimer = null;
+    var flowBusy = false;
+    function checkNudge() {
+      clearTimeout(nudgeTimer);
+      if (!currentUser()) return;
+      var list = read(MSG_KEY, []);
+      if (!list.length) return;
+      var last = list[list.length - 1];
+      var userSpoke = list.some(function (x) { return !BOTS[x.userId]; });
+      var nudged = list.some(function (x) { return x.userId === 'sion' && x.text === NUDGE_TEXT; });
+      if (!userSpoke || nudged || !BOTS[last.userId]) return;
+      var due = last.ts + NUDGE_MS;
+      var wait = due - Date.now();
+      if (wait <= 0) postBot('sion', NUDGE_TEXT, due);
+      else nudgeTimer = setTimeout(checkNudge, Math.min(wait, 2147483000));
+    }
+    document.addEventListener('visibilitychange', function () {
+      if (!document.hidden) checkNudge();
+    });
     function sendMessage() {
       var text = msgInput.value.trim().slice(0, 2000);
       var user = currentUser();
       if (!text || !user) return;
       var list = read(MSG_KEY, []);
       var isFirst = !list.some(function (x) { return x.userId === user.id; });
-      var rikuAsked = list.some(function (x) { return x.userId === 'riku' && x.text === '시온이 형이 초대했어요?'; });
-      var sionSpoke = list.some(function (x) { return x.userId === 'sion'; });
+      var rikuAsked = list.some(function (x) { return x.userId === 'riku' && x.text === RIKU_INVITE; });
+      var sionWelcomed = list.some(function (x) { return x.userId === 'sion' && x.text === SION_WELCOME; });
       var m = {
         id: bytesToHex(crypto.getRandomValues(new Uint8Array(6))),
         userId: user.id,
@@ -857,15 +895,27 @@
       msgList.appendChild(messageNode(m));
       msgInput.value = '';
       updateSend();
+      updateOnline();
       scrollFeed();
       msgInput.focus();
+      checkNudge();
       if (isFirst) {
+        flowBusy = true;
         setTimeout(function () {
           postBot('riku', '안뇽하세요');
-          setTimeout(function () { postBot('riku', '시온이 형이 초대했어요?'); }, 1000);
+          setTimeout(function () { postBot('riku', RIKU_INVITE); flowBusy = false; }, 1000);
         }, 900);
-      } else if (rikuAsked && !sionSpoke) {
-        setTimeout(function () { postBot('sion', '오 뭐야 들어 왔네 ㅋㅋㅋ'); }, 1000);
+      } else if (!flowBusy && !sionWelcomed) {
+        flowBusy = true;
+        setTimeout(function () {
+          if (!rikuAsked) { // 중간에 나갔다 와서 리쿠 질문이 아직 없으면 먼저 이어 붙여요
+            postBot('riku', RIKU_INVITE);
+            flowBusy = false;
+            return;
+          }
+          postBot('sion', SION_WELCOME);
+          setTimeout(function () { postBot('riku', RIKU_LAST); flowBusy = false; }, 3000);
+        }, 1000);
       }
     }
     $('chat-back').addEventListener('click', closeChat);
@@ -878,7 +928,7 @@
     });
     sendBtn.addEventListener('click', sendMessage);
 
-    function validEmail(v) { return /^[A-Za-z0-9@._-]+$/.test(v); }
+    function validEmail(v) { return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v); }
 
     form.addEventListener('submit', function (e) {
       e.preventDefault();
@@ -896,9 +946,9 @@
         var nickname = nameInput.value.trim();
         var len = Array.from(nickname).length;
         if (len < 2 || len > 16) return setNote('닉네임은 2자에서 16자 사이로 입력해 주세요.', 'err');
-        if (!validEmail(email)) return setNote('아이디는 영어와 숫자로 입력해 주세요.', 'err');
+        if (!validEmail(email)) return setNote('이메일 형식을 확인해 주세요.', 'err');
         if (password.length < 8) return setNote('비밀번호는 8자 이상이어야 해요.', 'err');
-        if (found) return setNote('이미 가입된 아이디예요. 로그인해 주세요.', 'err');
+        if (found) return setNote('이미 가입된 이메일이에요. 로그인해 주세요.', 'err');
 
         submit.disabled = true;
         var saltBytes = crypto.getRandomValues(new Uint8Array(16));
@@ -926,8 +976,8 @@
         return;
       }
 
-      if (!validEmail(email)) return setNote('아이디는 영어와 숫자로 입력해 주세요.', 'err');
-      if (!found) return setNote('가입되지 않은 아이디예요. 먼저 가입해 주세요.', 'err');
+      if (!validEmail(email)) return setNote('이메일 형식을 확인해 주세요.', 'err');
+      if (!found) return setNote('가입되지 않은 이메일이에요. 먼저 가입해 주세요.', 'err');
       if (!password) return setNote('비밀번호를 입력해 주세요.', 'err');
 
       submit.disabled = true;
@@ -939,6 +989,7 @@
         renderHome(found);
         app.classList.remove('is-welcome');
         app.classList.add('is-home');
+        checkNudge();
       }).catch(function () {
         setNote('로그인 중 문제가 생겼어요. 잠시 뒤에 다시 시도해 주세요.', 'err');
       }).then(function () { submit.disabled = false; });
