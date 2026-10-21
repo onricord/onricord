@@ -1,0 +1,949 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}</style>
+<title>Onricord</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,800&family=Noto+Sans+KR:wght@400;500;700&display=swap">
+<style>
+  /* Layout: 430px 폰 프레임. 스플래시 → 환영(가입/로그인) → 홈(서버 레일 + 채널 목록 + 내 정보 바). 검정 바탕에 흰색 포인트 */
+  :root {
+    --bg: #000000;
+    --rail: #050505;
+    --panel: #0f0f0f;
+    --raised: #1b1b1b;
+    --sel: #262626;
+    --line: rgba(255, 255, 255, .12);
+    --text: #ffffff;
+    --muted: #a9a9a9;
+    --accent: #ffffff;
+    --on-accent: #000000;
+    --ok: #8fe3a8;
+    --err: #ff9b9b;
+    --font-display: 'Bricolage Grotesque', 'Noto Sans KR', system-ui, sans-serif;
+    --font-body: 'Noto Sans KR', system-ui, -apple-system, 'Apple SD Gothic Neo', sans-serif;
+    color-scheme: dark;
+  }
+  [hidden] { display: none !important; }
+  html, body { height: 100%; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font-body);
+    font-size: 16px;
+    line-height: 1.5;
+  }
+  * { box-sizing: border-box; }
+  button { font-family: inherit; color: inherit; }
+  svg.i { width: 22px; height: 22px; flex: none; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+  svg.i.fill { fill: currentColor; stroke: none; }
+
+  .app {
+    position: relative;
+    width: 100%;
+    max-width: 430px;
+    height: 100%;
+    margin-inline: auto;
+    overflow: hidden;
+    background: var(--bg);
+    isolation: isolate;
+  }
+  @media (min-width: 520px) {
+    body { display: grid; place-items: center; }
+    .app { height: min(100%, 900px); border-radius: 36px; box-shadow: 0 0 0 1px rgba(255, 255, 255, .14), 0 30px 80px rgba(0, 0, 0, .6); }
+  }
+
+  .screen {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    transition: opacity .6s ease, visibility .6s;
+  }
+
+  /* 1. 스플래시 */
+  .splash { z-index: 3; background: var(--bg); align-items: center; justify-content: center; cursor: pointer; }
+  .splash .mark { width: 148px; height: 86px; color: var(--text); animation: pop .9s cubic-bezier(.2, .8, .2, 1) both; }
+  @keyframes pop { from { opacity: 0; transform: scale(.82); } to { opacity: 1; transform: scale(1); } }
+  .app.is-welcome .splash, .app.is-home .splash { opacity: 0; visibility: hidden; }
+
+  /* 2. 환영 화면 */
+  .welcome {
+    z-index: 1;
+    opacity: 0;
+    visibility: hidden;
+    background:
+      radial-gradient(110% 50% at 85% 0%, rgba(255, 255, 255, .09), transparent 62%),
+      linear-gradient(180deg, #000000 0%, #050505 60%, #0e0e0e 100%);
+  }
+  .app.is-welcome .welcome { opacity: 1; visibility: visible; }
+
+  .orb {
+    position: absolute;
+    border-radius: 50%;
+    pointer-events: none;
+    border: 1px solid rgba(255, 255, 255, .22);
+    background: radial-gradient(circle at 35% 30%, rgba(255, 255, 255, .16), rgba(255, 255, 255, 0) 66%);
+    filter: blur(1.5px);
+    animation: drift 14s ease-in-out infinite alternate;
+  }
+  .o1 { width: 150px; height: 150px; top: 7%; right: -34px; }
+  .o2 { width: 66px; height: 66px; top: 23%; left: 11%; animation-delay: -4s; }
+  .o3 { width: 230px; height: 230px; bottom: 20%; left: -100px; border-color: rgba(255, 255, 255, .3); animation-delay: -8s; }
+  .o4 { width: 88px; height: 88px; bottom: 9%; right: 9%; animation-delay: -2s; }
+  @keyframes drift { from { transform: translate3d(0, 0, 0); } to { transform: translate3d(10px, -18px, 0); } }
+
+  .dust {
+    position: absolute;
+    top: 0; left: 0;
+    width: 2px; height: 2px;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, .7);
+    box-shadow:
+      52px 96px 0 rgba(255,255,255,.55), 318px 70px 0 rgba(255,255,255,.8), 176px 160px 0 rgba(255,255,255,.4),
+      388px 244px 0 rgba(255,255,255,.6), 34px 300px 0 rgba(255,255,255,.5), 244px 352px 0 rgba(255,255,255,.35),
+      120px 436px 0 rgba(255,255,255,.65), 360px 500px 0 rgba(255,255,255,.45), 70px 590px 0 rgba(255,255,255,.55),
+      290px 640px 0 rgba(255,255,255,.7), 200px 724px 0 rgba(255,255,255,.4), 396px 780px 0 rgba(255,255,255,.6),
+      24px 840px 0 rgba(255,255,255,.5), 150px 880px 0 rgba(255,255,255,.35);
+    animation: twinkle 6s ease-in-out infinite alternate;
+  }
+  @keyframes twinkle { from { opacity: .55; } to { opacity: 1; } }
+
+  .welcome-inner {
+    position: relative;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    padding-block: 32px 28px;
+    padding-left: max(24px, env(safe-area-inset-left, 0px));
+    padding-right: max(24px, env(safe-area-inset-right, 0px));
+  }
+  .hero { margin-block: auto; display: flex; flex-direction: column; gap: 18px; }
+  .hero .mark { width: 96px; height: 56px; color: var(--accent); }
+  h1 {
+    margin: 0;
+    font-size: clamp(1.7rem, 7.4vw, 2.1rem);
+    line-height: 1.3;
+    font-weight: 700;
+    letter-spacing: -.01em;
+    word-break: keep-all;
+    text-wrap: balance;
+  }
+  .wm { font-family: var(--font-display); font-weight: 800; letter-spacing: -.035em; }
+  .lead { margin: 0; max-width: 30ch; color: var(--muted); word-break: keep-all; }
+
+  .actions { display: flex; flex-direction: column; gap: 12px; }
+  .btn {
+    appearance: none;
+    height: 56px;
+    border-radius: 999px;
+    border: 1px solid transparent;
+    font: 700 1rem/1 var(--font-body);
+    cursor: pointer;
+    transition: transform .15s ease, background-color .2s ease;
+  }
+  .btn:active { transform: scale(.985); }
+  .btn:focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; }
+  .btn:disabled { opacity: .6; cursor: progress; }
+  .btn-primary { background: var(--accent); color: var(--on-accent); }
+  .btn-primary:hover { background: #e4e4e4; }
+  .btn-ghost { background: rgba(255, 255, 255, .09); border-color: rgba(255, 255, 255, .24); color: var(--text); }
+  .btn-ghost:hover { background: rgba(255, 255, 255, .16); }
+
+  .app.is-welcome .hero > *, .app.is-welcome .actions { animation: rise .7s cubic-bezier(.2, .8, .2, 1) both; }
+  .app.is-welcome .hero > :nth-child(2) { animation-delay: .08s; }
+  .app.is-welcome .hero > :nth-child(3) { animation-delay: .16s; }
+  .app.is-welcome .actions { animation-delay: .26s; }
+  @keyframes rise { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: translateY(0); } }
+
+  /* 3. 홈 */
+  .home, .chat {
+    --av: hsl(210 68% 44%);
+    --rail: #f0f0f3; --panel: #fbfbfb; --raised: #e8e8ec; --sel: #e1e1e5;
+    --line: rgba(0, 0, 0, .1); --text: #17171a; --muted: #67676e; --accent: #17171a;
+    --hover: rgba(0, 0, 0, .05); --bar: #ffffff;
+    color: var(--text); color-scheme: light;
+  }
+  .home { z-index: 1; flex-direction: row; background: var(--rail); opacity: 0; visibility: hidden; }
+  .app.is-home .home { opacity: 1; visibility: visible; }
+
+  .rail {
+    flex: none;
+    width: 76px;
+    padding-top: 20px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+  }
+  .rail-btn, .server-ico {
+    width: 54px; height: 54px;
+    border-radius: 18px;
+    display: grid; place-items: center;
+    border: 0;
+    background: var(--raised);
+    color: var(--text);
+  }
+  .rail-btn { cursor: pointer; }
+  .rail-btn:focus-visible, .server-btn:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+  .rail-sep { width: 34px; height: 1px; background: var(--line); }
+  .server-btn { position: relative; appearance: none; border: 0; background: none; padding: 0; cursor: pointer; border-radius: 18px; }
+  .server-btn::before {
+    content: ""; position: absolute; left: -11px; top: 9px; width: 4px; height: 36px;
+    border-radius: 0 4px 4px 0; background: var(--accent);
+  }
+  .server-ico { display: block; object-fit: cover; }
+
+  .panel {
+    position: relative;
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    background: var(--panel);
+    border-top-left-radius: 28px;
+    border-top: 1px solid var(--line);
+    border-left: 1px solid var(--line);
+    padding-top: 16px;
+  }
+  .panel-head { display: flex; flex-direction: column; gap: 12px; padding-inline: 14px 12px; padding-bottom: 14px; }
+  .title-btn {
+    appearance: none; background: none; border: 0; padding: 4px 2px; cursor: default;
+    display: flex; align-items: center; gap: 6px; min-width: 0;
+    font-weight: 700; font-size: 1.15rem; text-align: left;
+  }
+  .title-btn span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .title-btn svg { width: 16px; height: 16px; color: var(--muted); }
+  .tools { display: flex; gap: 8px; }
+  .tool {
+    appearance: none; height: 44px; border-radius: 14px; cursor: pointer;
+    background: var(--raised); border: 1px solid var(--line); color: var(--text);
+    display: flex; align-items: center; justify-content: center; gap: 8px;
+  }
+  .tool.grow { flex: 1; min-width: 0; font-weight: 500; font-size: .9375rem; }
+  .tool.sq { width: 44px; flex: none; }
+  .tool:focus-visible, .row-btn:focus-visible, .section-head:focus-visible, .channel:focus-visible, .who:focus-visible, .bell:focus-visible, .menu-item:focus-visible {
+    outline: 2px solid var(--accent); outline-offset: 2px;
+  }
+  .scroll { flex: 1; min-height: 0; overflow-y: auto; border-top: 1px solid var(--line); }
+  .row-btn {
+    appearance: none; background: none; border: 0; cursor: pointer; width: 100%;
+    display: flex; align-items: center; gap: 12px; padding: 14px 16px; color: var(--muted);
+    border-bottom: 1px solid var(--line); text-align: left; font-size: 1rem;
+  }
+  .section-head {
+    appearance: none; background: none; border: 0; cursor: pointer;
+    display: flex; align-items: center; gap: 6px; padding: 14px 16px 6px;
+    color: var(--muted); font-size: .875rem; font-weight: 500;
+  }
+  .section-head svg { width: 14px; height: 14px; transition: transform .2s ease; }
+  .section-head[aria-expanded="false"] svg { transform: rotate(-90deg); }
+  .channel {
+    appearance: none; border: 0; cursor: pointer; background: transparent;
+    display: flex; align-items: center; gap: 12px;
+    width: calc(100% - 16px); margin-inline: 8px; height: 46px; padding: 0 10px;
+    border-radius: 12px; color: var(--muted); font-size: 1rem; font-weight: 500; text-align: left;
+  }
+  .channel:hover { background: var(--hover); }
+  .channel.active { background: var(--sel); color: var(--text); }
+  .channel svg { color: inherit; }
+
+  .userbar {
+    margin: 10px 12px; margin-bottom: calc(14px + env(safe-area-inset-bottom, 0px));
+    padding: 8px 12px 8px 8px;
+    display: flex; align-items: center; gap: 4px;
+    background: var(--bar); border: 1px solid var(--line); border-radius: 24px;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, .08);
+  }
+  .who {
+    appearance: none; background: none; border: 0; cursor: pointer; flex: 1; min-width: 0;
+    display: flex; align-items: center; gap: 12px; padding: 0; text-align: left; border-radius: 18px;
+  }
+  .avatar {
+    position: relative; flex: none; width: 46px; height: 46px; border-radius: 50%;
+    background: var(--av); display: grid; place-items: center; color: #fff;
+  }
+  .avatar svg { width: 30px; height: 18px; fill: none; stroke: currentColor; }
+  .dot {
+    position: absolute; right: -2px; bottom: -2px; width: 14px; height: 14px; border-radius: 50%;
+    background: #3fae5f; border: 3px solid var(--bar);
+  }
+  .who-text { min-width: 0; display: flex; flex-direction: column; line-height: 1.25; }
+  .who-name { display: flex; align-items: center; gap: 4px; font-weight: 700; }
+  .who-name span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .who-name svg { width: 16px; height: 16px; flex: none; }
+  .who-state { font-size: .75rem; color: var(--muted); }
+  .bell { appearance: none; background: none; border: 0; padding: 8px; border-radius: 12px; cursor: pointer; color: var(--muted); }
+
+  .menu {
+    position: absolute; left: 12px; right: 12px; z-index: 3;
+    bottom: calc(14px + 66px + 18px + env(safe-area-inset-bottom, 0px));
+    background: var(--bar); border: 1px solid var(--line); border-radius: 18px; padding: 6px;
+    box-shadow: 0 12px 30px rgba(0, 0, 0, .16);
+  }
+  .menu-item {
+    appearance: none; width: 100%; height: 46px; border: 0; background: none; cursor: pointer;
+    border-radius: 12px; padding: 0 12px; text-align: left; font-size: 1rem; font-weight: 500;
+  }
+  .menu-item:hover { background: var(--hover); }
+
+  /* 4. 채팅 채널 */
+  .chat {
+    z-index: 2; background: var(--panel);
+    opacity: 0; visibility: hidden; transform: translateX(18px);
+    transition: opacity .3s ease, transform .3s ease, visibility .3s;
+  }
+  .app.is-chat .chat { opacity: 1; visibility: visible; transform: none; }
+  .chat-head {
+    flex: none; display: flex; align-items: center; gap: 8px;
+    padding: 12px 12px 10px 10px; border-bottom: 1px solid var(--line); background: var(--panel);
+  }
+  .icon-btn {
+    appearance: none; border: 0; background: none; cursor: pointer; flex: none;
+    width: 42px; height: 42px; border-radius: 12px; display: grid; place-items: center; color: var(--muted);
+  }
+  .icon-btn:hover { background: var(--hover); }
+  .icon-btn:focus-visible, .cbtn:focus-visible, .send:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .chat-title { flex: 1; min-width: 0; display: flex; flex-direction: column; line-height: 1.25; }
+  .chat-title b { display: flex; align-items: center; gap: 6px; font-size: 1.1rem; font-weight: 700; }
+  .chat-title b svg:first-child { width: 20px; height: 20px; }
+  .chat-title b svg:last-child { width: 14px; height: 14px; color: var(--muted); transform: rotate(-90deg); }
+  .chat-title small { display: flex; align-items: center; gap: 6px; font-size: .75rem; color: var(--muted); }
+  .online-dot { width: 9px; height: 9px; border-radius: 50%; background: #2f7a4a; }
+  .feed { flex: 1; min-height: 0; overflow-y: auto; }
+  .feed-inner { min-height: 100%; display: flex; flex-direction: column; justify-content: flex-end; padding-bottom: 10px; }
+  .intro { display: flex; flex-direction: column; gap: 10px; padding: 16px 20px 18px; }
+  .intro-ico { width: 72px; height: 72px; border-radius: 50%; background: var(--raised); display: grid; place-items: center; }
+  .intro-ico svg { width: 34px; height: 34px; }
+  .intro h2 { margin: 10px 0 0; font-size: 1.3rem; font-weight: 500; word-break: keep-all; }
+  .intro p { margin: 0; font-size: .9rem; color: var(--text); word-break: keep-all; }
+  .msg { display: grid; grid-template-columns: 46px minmax(0, 1fr); gap: 12px; padding: 8px 16px; }
+  .msg-meta { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 10px; }
+  .msg-meta b { font-weight: 700; }
+  .msg-meta time { font-size: .75rem; color: var(--muted); }
+  .msg-text { white-space: pre-wrap; overflow-wrap: anywhere; }
+  .composer {
+    flex: none; display: flex; align-items: center; gap: 2px;
+    margin: 6px 12px; margin-bottom: calc(14px + env(safe-area-inset-bottom, 0px));
+    padding: 5px 10px; min-height: 52px; border-radius: 26px;
+    background: var(--raised); border: 1px solid var(--line);
+  }
+  .composer:focus-within { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .composer input {
+    flex: 1; min-width: 0; height: 40px; padding: 0 8px; border: 0; background: transparent;
+    color: var(--text); font: 400 1rem var(--font-body); outline: none;
+  }
+  .composer input::placeholder { color: var(--muted); }
+  .cbtn {
+    appearance: none; border: 0; background: none; cursor: pointer; flex: none;
+    width: 38px; height: 38px; border-radius: 12px; display: grid; place-items: center; color: var(--muted);
+  }
+  .send {
+    appearance: none; border: 0; cursor: pointer; flex: none; width: 38px; height: 38px; border-radius: 50%;
+    background: var(--accent); color: #ffffff; display: grid; place-items: center;
+  }
+
+  /* 가입·로그인 시트 */
+  .backdrop {
+    position: absolute; inset: 0; z-index: 4;
+    background: rgba(0, 0, 0, .65);
+    opacity: 0; visibility: hidden;
+    transition: opacity .3s ease, visibility 0s .3s;
+  }
+  .sheet {
+    position: absolute; left: 0; right: 0; bottom: 0; z-index: 5;
+    max-height: 94%; overflow-y: auto;
+    background: #0d0d0d;
+    border-top: 1px solid rgba(255, 255, 255, .16);
+    border-radius: 26px 26px 0 0;
+    padding-top: 22px;
+    padding-bottom: calc(24px + env(safe-area-inset-bottom, 0px));
+    padding-left: max(24px, env(safe-area-inset-left, 0px));
+    padding-right: max(24px, env(safe-area-inset-right, 0px));
+    transform: translateY(100%);
+    visibility: hidden;
+    transition: transform .38s cubic-bezier(.2, .8, .2, 1), visibility 0s .38s;
+  }
+  .app.sheet-open .backdrop { opacity: 1; visibility: visible; transition-delay: 0s; }
+  .app.sheet-open .sheet { transform: translateY(0); visibility: visible; transition-delay: 0s; }
+  .sheet-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 4px; }
+  .sheet h2 { margin: 0; font-size: 1.25rem; }
+  .hint { margin: 0 0 14px; font-size: .875rem; color: var(--muted); word-break: keep-all; }
+  .close {
+    appearance: none; width: 40px; height: 40px; border-radius: 50%;
+    background: rgba(255, 255, 255, .08); border: 0; color: var(--text);
+    font-size: 1.25rem; line-height: 1; cursor: pointer;
+  }
+  .close:focus-visible, .switch:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+  form { display: flex; flex-direction: column; gap: 14px; }
+  .field { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+  .field label { font-size: .8125rem; color: var(--muted); font-weight: 500; }
+  .field input {
+    height: 48px; width: 100%; padding: 0 14px;
+    border-radius: 14px; border: 1px solid rgba(255, 255, 255, .18);
+    background: rgba(255, 255, 255, .06); color: var(--text);
+    font: 400 1rem var(--font-body);
+  }
+  .field input:focus { outline: 2px solid var(--accent); outline-offset: 1px; border-color: transparent; }
+  .note { min-height: 1.4em; margin: 0; font-size: .875rem; color: var(--muted); word-break: keep-all; }
+  .note.err { color: var(--err); }
+  .note.ok { color: var(--ok); }
+  .switch {
+    appearance: none; background: none; border: 0; padding: 6px 0;
+    color: var(--muted); font: 500 .9rem var(--font-body); cursor: pointer; text-decoration: underline; text-underline-offset: 3px;
+    align-self: center;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation: none !important; transition-duration: .01s !important; transition-delay: 0s !important; }
+  }
+</style>
+
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+  <symbol id="onri-mark" viewBox="-2 10 124 72">
+    <path d="M32 16 H88 C100 16 108 26 112 44 L116 62 C118 72 112 78 104 78 C96 78 92 72 86 66 H34 C28 72 24 78 16 78 C8 78 2 72 4 62 L8 44 C12 26 20 16 32 16 Z" fill="none" stroke="currentColor" stroke-width="6" stroke-linejoin="round"/>
+    <path d="M36 33 V55 M25 44 H47" fill="none" stroke="currentColor" stroke-width="7" stroke-linecap="round"/>
+    <circle cx="83" cy="38" r="5.5" fill="currentColor"/>
+    <circle cx="97" cy="50" r="5.5" fill="currentColor"/>
+  </symbol>
+  <symbol id="ic-chevron" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></symbol>
+</svg>
+
+<main class="app" id="app">
+  <section class="screen splash" id="splash" aria-label="Onricord 시작 화면">
+    <svg class="mark" role="img" aria-label="Onricord 로고"><use href="#onri-mark"/></svg>
+  </section>
+
+  <section class="screen welcome" aria-label="환영 화면">
+    <i class="orb o1"></i><i class="orb o2"></i><i class="orb o3"></i><i class="orb o4"></i>
+    <i class="dust"></i>
+    <div class="welcome-inner">
+      <div class="hero">
+        <svg class="mark" aria-hidden="true"><use href="#onri-mark"/></svg>
+        <h1><span class="wm">onricord</span>에 오신 걸 환영해요</h1>
+        <p class="lead">모여서 이야기하고, 같이 놀고, 가볍게 수다 떨어요. 아래 버튼으로 시작해요.</p>
+      </div>
+      <div class="actions">
+        <button class="btn btn-primary" type="button" data-open="signup">가입하기</button>
+        <button class="btn btn-ghost" type="button" data-open="login">로그인</button>
+      </div>
+    </div>
+  </section>
+
+  <section class="screen home" id="home" aria-label="홈">
+    <nav class="rail" aria-label="서버 목록">
+      <button class="rail-btn" type="button" aria-label="다이렉트 메시지">
+        <svg class="i fill" viewBox="0 0 24 24"><path d="M12 3C6.5 3 3 6.4 3 10.5c0 2.2 1 4.1 2.6 5.4L5 21l4.4-2.3c.8.2 1.7.3 2.6.3 5.5 0 9-3.4 9-7.5S17.5 3 12 3z"/></svg>
+      </button>
+      <div class="rail-sep"></div>
+      <button class="server-btn" type="button" aria-label="내 서버" aria-current="true">
+        <img class="server-ico" src="data:image/jpeg;base64,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" alt="" width="54" height="54">
+      </button>
+    </nav>
+
+    <div class="panel">
+      <div class="panel-head">
+        <button class="title-btn" type="button" tabindex="-1">
+          <span id="server-title">오시온님의 서버</span>
+          <svg class="i" viewBox="0 0 24 24" style="transform: rotate(-90deg)"><use href="#ic-chevron"/></svg>
+        </button>
+        <div class="tools">
+          <button class="tool grow" type="button">
+            <svg class="i" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="M16 16l5 5"/></svg>
+            검색하기
+          </button>
+          <button class="tool sq" type="button" aria-label="친구 초대">
+            <svg class="i" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.5"/><path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6M19 6v6M16 9h6"/></svg>
+          </button>
+          <button class="tool sq" type="button" aria-label="일정">
+            <svg class="i" viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="15" rx="3"/><path d="M4 10h16M8 3v4M16 3v4"/></svg>
+          </button>
+        </div>
+      </div>
+
+      <div class="scroll">
+        <button class="row-btn" type="button">
+          <svg class="i" viewBox="0 0 24 24"><path d="M12 3.5l2.5 5.2 5.7.8-4.1 4 1 5.7L12 16.5 6.9 19.2l1-5.7-4.1-4 5.7-.8z"/></svg>
+          서버 응원하기
+        </button>
+
+        <button class="section-head" type="button" aria-expanded="true" aria-controls="list-chat">
+          채팅 채널
+          <svg class="i" viewBox="0 0 24 24"><use href="#ic-chevron"/></svg>
+        </button>
+        <div id="list-chat">
+          <button class="channel active" type="button" data-chat="general">
+            <svg class="i" viewBox="0 0 24 24"><path d="M9 4L7 20M17 4l-2 16M4 9h16M3.5 15h16"/></svg>
+            겜할사람
+          </button>
+        </div>
+
+        <button class="section-head" type="button" aria-expanded="true" aria-controls="list-voice">
+          음성 채널
+          <svg class="i" viewBox="0 0 24 24"><use href="#ic-chevron"/></svg>
+        </button>
+        <div id="list-voice">
+          <button class="channel" type="button">
+            <svg class="i" viewBox="0 0 24 24"><path d="M4 9v6h4l5 4V5L8 9z"/><path d="M16.5 9c1.4 1.2 1.4 4.8 0 6"/></svg>
+            일반
+          </button>
+        </div>
+      </div>
+
+      <div class="menu" id="menu" hidden>
+        <button class="menu-item" id="logout" type="button">로그아웃</button>
+      </div>
+
+      <div class="userbar">
+        <button class="who" id="who" type="button" aria-haspopup="true" aria-expanded="false">
+          <span class="avatar">
+            <svg aria-hidden="true"><use href="#onri-mark"/></svg>
+            <i class="dot"></i>
+          </span>
+          <span class="who-text">
+            <span class="who-name"><span id="who-name">닉네임</span><svg class="i" viewBox="0 0 24 24"><use href="#ic-chevron"/></svg></span>
+            <span class="who-state">온라인</span>
+          </span>
+        </button>
+        <button class="bell" type="button" aria-label="알림">
+          <svg class="i fill" viewBox="0 0 24 24"><path d="M6 16v-5a6 6 0 1 1 12 0v5l1.5 2h-15zM10 20a2 2 0 0 0 4 0z"/></svg>
+        </button>
+      </div>
+    </div>
+  </section>
+
+  <section class="screen chat" id="chat" aria-label="겜할사람 채널">
+    <header class="chat-head">
+      <button class="icon-btn" id="chat-back" type="button" aria-label="뒤로">
+        <svg class="i" viewBox="0 0 24 24"><path d="M19 12H5M11 6l-6 6 6 6"/></svg>
+      </button>
+      <div class="chat-title">
+        <b>
+          <svg class="i" viewBox="0 0 24 24"><path d="M9 4L7 20M17 4l-2 16M4 9h16M3.5 15h16"/></svg>
+          겜할사람
+          <svg class="i" viewBox="0 0 24 24"><use href="#ic-chevron"/></svg>
+        </b>
+        <small><i class="online-dot"></i>2명 온라인</small>
+      </div>
+      <button class="icon-btn" type="button" aria-label="검색">
+        <svg class="i" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="M16 16l5 5"/></svg>
+      </button>
+    </header>
+
+    <div class="feed" id="feed">
+      <div class="feed-inner">
+        <div class="intro">
+          <div class="intro-ico">
+            <svg class="i" viewBox="0 0 24 24"><path d="M9 4L7 20M17 4l-2 16M4 9h16M3.5 15h16"/></svg>
+          </div>
+          <h2>오시온님의 서버에 오신 것을 환영합니다!</h2>
+          <p>직접 만드신 새로운 서버에 오신 것을 환영해요.</p>
+        </div>
+        <div id="messages"></div>
+      </div>
+    </div>
+
+    <div class="composer">
+      <button class="cbtn" type="button" aria-label="첨부">
+        <svg class="i" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
+      </button>
+      <input id="msg" type="text" placeholder="#겜할사람에 메시지 보내기" autocomplete="off" enterkeyhint="send" maxlength="2000" aria-label="메시지">
+      <button class="cbtn" type="button" aria-label="선물">
+        <svg class="i fill" viewBox="0 0 24 24"><path d="M4 8h16v4H4zM5 13h14v7H5zM12 8C11 4.5 7 4.5 7 6.8 7 8 9 8 12 8zM12 8c1-3.5 5-3.5 5-1.2C17 8 15 8 12 8z"/></svg>
+      </button>
+      <button class="cbtn" type="button" aria-label="이모지">
+        <svg class="i fill" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9.5"/><circle cx="9" cy="10" r="1.3" style="fill: var(--raised)"/><circle cx="15" cy="10" r="1.3" style="fill: var(--raised)"/><path d="M8 14c1 2.2 2.5 3 4 3s3-.8 4-3z" style="fill: var(--raised)"/></svg>
+      </button>
+      <button class="cbtn" id="mic" type="button" aria-label="음성">
+        <svg class="i fill" viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="12" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 18v3" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+      </button>
+      <button class="send" id="send" type="button" aria-label="보내기" hidden>
+        <svg class="i" viewBox="0 0 24 24"><path d="M12 19V5M6 11l6-6 6 6"/></svg>
+      </button>
+    </div>
+  </section>
+
+  <div class="backdrop" id="backdrop"></div>
+  <div class="sheet" id="sheet" role="dialog" aria-modal="true" aria-labelledby="sheet-title">
+    <div class="sheet-head">
+      <h2 id="sheet-title">가입하기</h2>
+      <button class="close" id="close" type="button" aria-label="닫기">×</button>
+    </div>
+    <p class="hint" id="hint">먼저 가입해야 로그인할 수 있어요. 닉네임은 내 정보와 서버 이름에 표시돼요.</p>
+    <form id="form" novalidate>
+      <div class="field" id="name-field">
+        <label for="f-name">닉네임</label>
+        <input id="f-name" name="name" type="text" autocomplete="nickname" maxlength="16" placeholder="2~16자">
+      </div>
+      <div class="field">
+        <label for="f-email">아이디</label>
+        <input id="f-email" name="email" type="text" autocomplete="username" autocapitalize="none" spellcheck="false" maxlength="32" placeholder="영어·숫자 아무거나">
+      </div>
+      <div class="field">
+        <label for="f-pw">비밀번호</label>
+        <input id="f-pw" name="password" type="password" autocomplete="current-password" placeholder="8자 이상">
+      </div>
+      <p class="note" id="note" role="status" aria-live="polite"></p>
+      <button class="btn btn-primary" id="submit" type="submit">가입하기</button>
+      <button class="switch" id="switch" type="button">이미 가입했나요? 로그인</button>
+    </form>
+  </div>
+</main>
+
+<script>
+  (function () {
+    var USERS_KEY = 'onricord.users';
+    var SESSION_KEY = 'onricord.session';
+    var mem = {};
+
+    function read(key, fallback) {
+      try {
+        var raw = localStorage.getItem(key);
+        if (raw !== null) return JSON.parse(raw);
+      } catch (e) {}
+      return Object.prototype.hasOwnProperty.call(mem, key) ? mem[key] : fallback;
+    }
+    function write(key, value) {
+      mem[key] = value;
+      try { localStorage.setItem(key, JSON.stringify(value)); } catch (e) {}
+    }
+    function remove(key) {
+      delete mem[key];
+      try { localStorage.removeItem(key); } catch (e) {}
+    }
+
+    function bytesToHex(bytes) {
+      return Array.prototype.map.call(bytes, function (b) { return ('0' + b.toString(16)).slice(-2); }).join('');
+    }
+    function hexToBytes(hex) {
+      var out = new Uint8Array(hex.length / 2);
+      for (var i = 0; i < out.length; i++) out[i] = parseInt(hex.substr(i * 2, 2), 16);
+      return out;
+    }
+    function hashPassword(password, saltHex) {
+      var enc = new TextEncoder();
+      return crypto.subtle.importKey('raw', enc.encode(password), 'PBKDF2', false, ['deriveBits']).then(function (key) {
+        return crypto.subtle.deriveBits({ name: 'PBKDF2', salt: hexToBytes(saltHex), iterations: 100000, hash: 'SHA-256' }, key, 256);
+      }).then(function (bits) { return bytesToHex(new Uint8Array(bits)); });
+    }
+
+    var $ = function (id) { return document.getElementById(id); };
+    var app = $('app');
+    var splash = $('splash');
+    var title = $('sheet-title');
+    var hint = $('hint');
+    var submit = $('submit');
+    var swap = $('switch');
+    var nameField = $('name-field');
+    var nameInput = $('f-name');
+    var emailInput = $('f-email');
+    var pwInput = $('f-pw');
+    var note = $('note');
+    var form = $('form');
+    var home = $('home');
+    var menu = $('menu');
+    var who = $('who');
+    var lastTrigger = null;
+    var mode = 'signup';
+
+    function getUsers() { return read(USERS_KEY, []); }
+    function currentUser() {
+      var id = read(SESSION_KEY, null);
+      if (!id) return null;
+      var list = getUsers();
+      for (var i = 0; i < list.length; i++) if (list[i].id === id) return list[i];
+      return null;
+    }
+
+    function renderHome(user) {
+      home.style.setProperty('--av', 'hsl(' + user.hue + ' 68% 44%)');
+      $('who-name').textContent = user.nickname;
+    }
+
+    function enter() {
+      clearTimeout(timer);
+      var user = currentUser();
+      if (user) {
+        renderHome(user);
+        app.classList.remove('is-welcome');
+        app.classList.add('is-home');
+      } else {
+        app.classList.remove('is-home');
+        app.classList.add('is-welcome');
+      }
+    }
+    var timer = setTimeout(enter, 1900);
+    splash.addEventListener('click', enter);
+
+    function setNote(text, kind) {
+      note.textContent = text || '';
+      note.className = 'note' + (kind ? ' ' + kind : '');
+    }
+    function setMode(m) {
+      mode = m;
+      var signup = m === 'signup';
+      title.textContent = signup ? '가입하기' : '로그인';
+      submit.textContent = signup ? '가입하기' : '로그인';
+      hint.textContent = signup
+        ? '먼저 가입해야 로그인할 수 있어요. 닉네임은 내 정보와 서버 이름에 표시돼요.'
+        : '가입한 아이디와 비밀번호로만 로그인할 수 있어요.';
+      swap.textContent = signup ? '이미 가입했나요? 로그인' : '아직 가입 전이에요. 가입하기';
+      nameField.hidden = !signup;
+      pwInput.autocomplete = signup ? 'new-password' : 'current-password';
+      setNote('');
+    }
+    function openSheet(m, trigger) {
+      lastTrigger = trigger || null;
+      setMode(m);
+      app.classList.add('sheet-open');
+      setTimeout(function () { (m === 'signup' ? nameInput : emailInput).focus(); }, 120);
+    }
+    function closeSheet(restoreFocus) {
+      app.classList.remove('sheet-open');
+      if (restoreFocus !== false && lastTrigger) lastTrigger.focus();
+    }
+
+    Array.prototype.forEach.call(document.querySelectorAll('[data-open]'), function (b) {
+      b.addEventListener('click', function () { openSheet(b.getAttribute('data-open'), b); });
+    });
+    $('close').addEventListener('click', function () { closeSheet(); });
+    $('backdrop').addEventListener('click', function () { closeSheet(); });
+    swap.addEventListener('click', function () { setMode(mode === 'signup' ? 'login' : 'signup'); });
+
+    function closeMenu() {
+      menu.hidden = true;
+      who.setAttribute('aria-expanded', 'false');
+    }
+    who.addEventListener('click', function (e) {
+      e.stopPropagation();
+      var open = menu.hidden;
+      menu.hidden = !open;
+      who.setAttribute('aria-expanded', String(open));
+    });
+    document.addEventListener('click', function (e) {
+      if (!menu.hidden && !menu.contains(e.target)) closeMenu();
+    });
+    document.addEventListener('keydown', function (e) {
+      if (e.key !== 'Escape') return;
+      if (app.classList.contains('sheet-open')) closeSheet();
+      else if (!menu.hidden) closeMenu();
+    });
+    $('logout').addEventListener('click', function () {
+      closeMenu();
+      remove(SESSION_KEY);
+      app.classList.remove('is-chat');
+      app.classList.remove('is-home');
+      app.classList.add('is-welcome');
+    });
+
+    // 섹션 접기, 채널 선택
+    Array.prototype.forEach.call(document.querySelectorAll('.section-head'), function (btn) {
+      btn.addEventListener('click', function () {
+        var open = btn.getAttribute('aria-expanded') === 'true';
+        btn.setAttribute('aria-expanded', String(!open));
+        $(btn.getAttribute('aria-controls')).hidden = open;
+      });
+    });
+    Array.prototype.forEach.call(document.querySelectorAll('.channel'), function (btn) {
+      btn.addEventListener('click', function () {
+        Array.prototype.forEach.call(document.querySelectorAll('.channel'), function (c) { c.classList.remove('active'); });
+        btn.classList.add('active');
+        if (btn.hasAttribute('data-chat')) openChat();
+      });
+    });
+
+    // 채팅
+    var MSG_KEY = 'onricord.messages';
+    var feed = $('feed');
+    var msgList = $('messages');
+    var msgInput = $('msg');
+    var sendBtn = $('send');
+    var micBtn = $('mic');
+
+    function pad(n) { return ('0' + n).slice(-2); }
+    function formatTime(ts) {
+      var d = new Date(ts);
+      var t = pad(d.getHours()) + ':' + pad(d.getMinutes());
+      if (d.toDateString() === new Date().toDateString()) return t;
+      return (d.getMonth() + 1) + '월 ' + d.getDate() + '일 ' + t;
+    }
+    function messageNode(m) {
+      var row = document.createElement('div');
+      row.className = 'msg';
+      var av = document.createElement('span');
+      av.className = 'avatar';
+      av.style.setProperty('--av', 'hsl(' + m.hue + ' 68% 44%)');
+      av.innerHTML = '<svg aria-hidden="true"><use href="#onri-mark"/></svg>';
+      var body = document.createElement('div');
+      var meta = document.createElement('div');
+      meta.className = 'msg-meta';
+      var name = document.createElement('b');
+      name.textContent = m.nickname;
+      var time = document.createElement('time');
+      time.textContent = formatTime(m.ts);
+      meta.appendChild(name);
+      meta.appendChild(time);
+      var text = document.createElement('div');
+      text.className = 'msg-text';
+      text.textContent = m.text;
+      body.appendChild(meta);
+      body.appendChild(text);
+      row.appendChild(av);
+      row.appendChild(body);
+      return row;
+    }
+    function scrollFeed() { feed.scrollTop = feed.scrollHeight; }
+    function renderMessages() {
+      msgList.textContent = '';
+      read(MSG_KEY, []).forEach(function (m) { msgList.appendChild(messageNode(m)); });
+      scrollFeed();
+    }
+    function updateSend() {
+      var has = msgInput.value.trim().length > 0;
+      sendBtn.hidden = !has;
+      micBtn.hidden = has;
+    }
+    function openChat() {
+      renderMessages();
+      app.classList.add('is-chat');
+      setTimeout(scrollFeed, 60);
+    }
+    function closeChat() { app.classList.remove('is-chat'); }
+    var BOTS = {
+      riku: { nickname: '리쿠', hue: 205 },
+      sion: { nickname: '오시온', hue: 28 }
+    };
+    function postBot(botId, text) {
+      var bot = BOTS[botId];
+      var m = {
+        id: bytesToHex(crypto.getRandomValues(new Uint8Array(6))),
+        userId: botId,
+        nickname: bot.nickname,
+        hue: bot.hue,
+        text: text,
+        ts: Date.now()
+      };
+      var list = read(MSG_KEY, []);
+      list.push(m);
+      write(MSG_KEY, list.slice(-200));
+      msgList.appendChild(messageNode(m));
+      scrollFeed();
+    }
+    function sendMessage() {
+      var text = msgInput.value.trim().slice(0, 2000);
+      var user = currentUser();
+      if (!text || !user) return;
+      var list = read(MSG_KEY, []);
+      var isFirst = !list.some(function (x) { return x.userId === user.id; });
+      var rikuAsked = list.some(function (x) { return x.userId === 'riku' && x.text === '시온이 형이 초대했어요?'; });
+      var sionSpoke = list.some(function (x) { return x.userId === 'sion'; });
+      var m = {
+        id: bytesToHex(crypto.getRandomValues(new Uint8Array(6))),
+        userId: user.id,
+        nickname: user.nickname,
+        hue: user.hue,
+        text: text,
+        ts: Date.now()
+      };
+      list.push(m);
+      write(MSG_KEY, list.slice(-200));
+      msgList.appendChild(messageNode(m));
+      msgInput.value = '';
+      updateSend();
+      scrollFeed();
+      msgInput.focus();
+      if (isFirst) {
+        setTimeout(function () {
+          postBot('riku', '안뇽하세요');
+          setTimeout(function () { postBot('riku', '시온이 형이 초대했어요?'); }, 1000);
+        }, 900);
+      } else if (rikuAsked && !sionSpoke) {
+        setTimeout(function () { postBot('sion', '오 뭐야 들어 왔네 ㅋㅋㅋ'); }, 1000);
+      }
+    }
+    $('chat-back').addEventListener('click', closeChat);
+    msgInput.addEventListener('input', updateSend);
+    msgInput.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter' && !e.isComposing && e.keyCode !== 229) {
+        e.preventDefault();
+        sendMessage();
+      }
+    });
+    sendBtn.addEventListener('click', sendMessage);
+
+    function validEmail(v) { return /^[A-Za-z0-9@._-]+$/.test(v); }
+
+    form.addEventListener('submit', function (e) {
+      e.preventDefault();
+      if (!(window.crypto && crypto.subtle)) {
+        setNote('이 브라우저에서는 가입과 로그인을 쓸 수 없어요. 최신 브라우저에서 열어 주세요.', 'err');
+        return;
+      }
+      var email = emailInput.value.trim().toLowerCase();
+      var password = pwInput.value;
+      var users = getUsers();
+      var found = null;
+      for (var i = 0; i < users.length; i++) if (users[i].email === email) found = users[i];
+
+      if (mode === 'signup') {
+        var nickname = nameInput.value.trim();
+        var len = Array.from(nickname).length;
+        if (len < 2 || len > 16) return setNote('닉네임은 2자에서 16자 사이로 입력해 주세요.', 'err');
+        if (!validEmail(email)) return setNote('아이디는 영어와 숫자로 입력해 주세요.', 'err');
+        if (password.length < 8) return setNote('비밀번호는 8자 이상이어야 해요.', 'err');
+        if (found) return setNote('이미 가입된 아이디예요. 로그인해 주세요.', 'err');
+
+        submit.disabled = true;
+        var saltBytes = crypto.getRandomValues(new Uint8Array(16));
+        var salt = bytesToHex(saltBytes);
+        hashPassword(password, salt).then(function (hash) {
+          var list = getUsers();
+          list.push({
+            id: bytesToHex(crypto.getRandomValues(new Uint8Array(8))),
+            nickname: nickname,
+            email: email,
+            salt: salt,
+            hash: hash,
+            hue: Math.floor(Math.random() * 360),
+            createdAt: Date.now()
+          });
+          write(USERS_KEY, list);
+          setMode('login');
+          emailInput.value = email;
+          pwInput.value = '';
+          setNote('가입이 완료됐어요. 이제 로그인해 주세요.', 'ok');
+          pwInput.focus();
+        }).catch(function () {
+          setNote('가입 중 문제가 생겼어요. 잠시 뒤에 다시 시도해 주세요.', 'err');
+        }).then(function () { submit.disabled = false; });
+        return;
+      }
+
+      if (!validEmail(email)) return setNote('아이디는 영어와 숫자로 입력해 주세요.', 'err');
+      if (!found) return setNote('가입되지 않은 아이디예요. 먼저 가입해 주세요.', 'err');
+      if (!password) return setNote('비밀번호를 입력해 주세요.', 'err');
+
+      submit.disabled = true;
+      hashPassword(password, found.salt).then(function (hash) {
+        if (hash !== found.hash) { setNote('비밀번호가 맞지 않아요.', 'err'); return; }
+        write(SESSION_KEY, found.id);
+        form.reset();
+        closeSheet(false);
+        renderHome(found);
+        app.classList.remove('is-welcome');
+        app.classList.add('is-home');
+      }).catch(function () {
+        setNote('로그인 중 문제가 생겼어요. 잠시 뒤에 다시 시도해 주세요.', 'err');
+      }).then(function () { submit.disabled = false; });
+    });
+  })();
+</script>
+</body>
+</html>
